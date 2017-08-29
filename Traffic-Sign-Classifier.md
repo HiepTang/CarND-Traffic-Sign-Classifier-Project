@@ -1,7 +1,9 @@
 # Traffic Sign Classifier
 ## Overview
-In this project, I used a convolutional neural network with Tensorflow in order to solve the traffic sign classifier with German traffic signs dataset.
-Source code link here
+In this project, I used a convolutional neural network with Tensorflow in order to solve the traffic sign classifier with German traffic signs dataset. Below are the link to my source code and its HTML version:
+[Source Code](Traffic_Sign_Classifier-Final.html)
+[HTML Version](Traffic_Sign_Classifier-Final.html)
+
 ## Dataset summary
 I used the following code to get some basic information of the [German Traffic Sign Dataset](http://benchmark.ini.rub.de/?section=gtsrb&subsection=dataset).
 ```python
@@ -56,13 +58,13 @@ def show_histogram(y, n_classes):
 ```python
 show_histogram(y_train, n_classes)
 ```
-The training distribution image HERE
+![Traing distribution](TrainDistribution.png)
 The training dataset is very unbalanced, some classes have only about 180 images and some classes have over 1800 images.
 #### The distribution of validation dataset
 ```python
 show_histogram(y_valid, n_classes)
 ```
-The validation distribution image HERE
+![Validation distribution](ValidationDistribution.png)
 The validation dataset is also very unbalanced. However, it maintains the ratio between training and validation dataset well on each class.
 #### Show some sample training images
 The show sample images function
@@ -97,7 +99,7 @@ Let's show some sample images
 ```python
 show_sample_images(y_train, X_train)
 ```
-Please refer to the source code HERE to see the result of this function. The images are significant different in term of contrast and brightness.
+Please refer to the [source code](Traffic_Sign_Classifier-Final.ipynb) to see the result of this function. The images are significant different in term of contrast and brightness.
 ## Data preprocessing and augmentation
 ### Convert to grayscale images
 According the [Traffic Sign Classification article of Pierre Sermanet and Yann LeCun ](http://yann.lecun.com/exdb/publis/pdf/sermanet-ijcnn-11.pdf), coverting the images to grayscale worked well and it also helps reduce the training time.

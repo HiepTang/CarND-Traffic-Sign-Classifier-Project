@@ -305,5 +305,698 @@ The distribution of augmented traing dataset does not change. The size of traing
 show_histogram(y_train_final, n_classes)
 ```
 ![FinalDistribution](TrainFinalDistribution.png)
+## Model Architecture
+![LeNetYann](LeNet-Yann.png)
+I have choosen the Multi-Scale Convulations Network model architecture from [Pierre Sermanet and Yann LeCun paper](http://yann.lecun.com/exdb/publis/pdf/sermanet-ijcnn-11.pdf) because I think it's effective and not required many computation resouce that match with my local computer. I also apply the dropout with dropout_pro=0.5 to the fully connected layer in order to reduce the overfitting issue.
+```python
+import tensorflow as tf
 
+from tensorflow.contrib.layers import flatten
+
+keep_prob = tf.placeholder(tf.float32)
+#keep_prob_conv1  = tf.placeholder(tf.float32)
+#keep_prob_conv2 = tf.placeholder(tf.float32)
+# Multi-Scale Convolutional Neural Networks - Pierre Sermanet and Yann LeCun
+# http://yann.lecun.com/exdb/publis/pdf/sermanet-ijcnn-11.pdf
+
+def LeNet_Pierre_Yann(x, mu=0, sigma=0.1):
+     # Layer 1: Convolutional. Input = 32x32x1. Output = 28x28x6.
+    # Need a filter height, width = 5 - strides 2 - VALID PADDING
+    # VALID Padding, the output height and width are computed as:
+    #out_height = ceil(float(in_height - filter_height + 1) / float(strides[1]))
+    # (32-5 + 1)/1
+    conv1_weights = tf.Variable(tf.truncated_normal(shape=(5,5,1,6), mean = mu, stddev = sigma))
+    conv1_bias = tf.Variable(tf.zeros(6))
+    conv1_strides = [1, 1, 1, 1]
+    conv1_padding = 'VALID'
+    conv1_layer = tf.nn.bias_add(tf.nn.conv2d(x, conv1_weights, conv1_strides, conv1_padding), conv1_bias)
+    
+     # Activation.
+    # Choose relu
+    conv1_layer = tf.nn.relu(conv1_layer)
+    # Pooling. Input = 28x28x6. Output = 14x14x6.
+    # SAME Padding
+    # out_height = ceil(float(in_height) / float(strides[1]))
+    conv1_pksize = [1,2,2, 1]
+    conv1_pstrides = [1,2,2, 1]
+    conv1_kpadding = 'VALID'
+    conv1_layer = tf.nn.max_pool(conv1_layer, conv1_pksize, conv1_pstrides, conv1_kpadding)
+    
+     # Dropout
+    #conv1_layer = tf.nn.dropout(conv1_layer, keep_prob_conv1)
+    
+     # Layer 2: Convolutional. Output = 10x10x16.
+    # Input from layer 1: 14x14x6
+    # (14-5+1)/1 - filter width - height = 5, strides 1
+    conv2_weights = tf.Variable(tf.truncated_normal(shape=(5,5,6,16), mean = mu, stddev = sigma))
+    conv2_bias = tf.Variable(tf.zeros(16))
+    conv2_strides = [1, 1, 1, 1]
+    conv2_padding = 'VALID'
+    conv2_layer = tf.nn.bias_add(tf.nn.conv2d(conv1_layer, conv2_weights, conv2_strides, conv2_padding), conv2_bias)
+    # Activation.
+    # Choose RELU
+    conv2_layer = tf.nn.relu(conv2_layer)
+    # Pooling. Input = 10x10x16. Output = 5x5x16.
+    # SAME PADDING with strides = 2
+    conv2_pksize = [1, 2, 2, 1]
+    conv2_pstrides = [1, 2, 2, 1]
+    conv2_ppadding = 'VALID'
+    conv2_layer = tf.nn.max_pool(conv2_layer, conv2_pksize, conv2_pstrides, conv2_ppadding)
+     # Dropout
+    #conv2_layer = tf.nn.dropout(conv2_layer, keep_prob_conv2)
+    
+    
+    # Layer 3: Convolutional. Input: 5x5x16
+    # Filter 3,3, 50
+    # Output (5 - 3 + 1)/1 = 3 => 3x3x50
+    conv3_weights = tf.Variable(tf.truncated_normal(shape=(3,3,16,50), mean = mu, stddev = sigma))
+    conv3_bias = tf.Variable(tf.zeros(50))
+    conv3_strides = [1,1,1,1]
+    conv3_padding = 'VALID'
+    conv3_layer = tf.nn.bias_add(tf.nn.conv2d(conv2_layer, conv3_weights, conv3_strides, conv3_padding), conv3_bias)
+    
+    # RELU activation
+    conv3_layer = tf.nn.relu(conv3_layer)
+    
+    
+    # Flatten layer 1 - Input = 14x14x6. Output = 1176.
+    #fc_layer1_flat = flatten(conv1_layer)
+    
+    # Flatten layer 2 - Input = 5x5x16. Output = 400.
+    fc_layer2_flat = flatten(conv2_layer)
+    
+    # Flatten layer 3 - Input = 3x3x50. Output = 450
+    fc_layer3_flat = flatten(conv3_layer)
+    
+    # Concat layer 2 flat and layer 3 flat. Input = 400 + 450. Output = 850
+    fc = tf.concat([fc_layer2_flat, fc_layer3_flat], 1)
+    
+     # Dropout
+    fc_dropout = tf.nn.dropout(fc, keep_prob)
+    
+    # TODO: Layer 4: Fully Connected. Input = 850. Output = 43.
+    fc1_w = tf.Variable(tf.truncated_normal(shape=(850, 43), mean = mu, stddev = sigma))
+    fc1_b = tf.Variable(tf.zeros(43))    
+    logits = tf.add(tf.matmul(fc_dropout, fc1_w), fc1_b)
+    
+    return logits
+```
+## Model Training
+```python
+x = tf.placeholder(tf.float32, (None, 32, 32, 1))
+y = tf.placeholder(tf.int32, (None))
+one_hot_y = tf.one_hot(y, 43)
+EPOCHS = 50
+BATCH_SIZE = 256
+
+
+learning_rate  = 0.001
+#learning_rate = 0.0001
+#learning_rate = 0.0009
+
+#logits = LeNet(x)
+logits = LeNet_Pierre_Yann(x)
+cross_entropy = tf.nn.softmax_cross_entropy_with_logits(labels=one_hot_y, logits=logits)
+loss_operation = tf.reduce_mean(cross_entropy)
+optimizer = tf.train.AdamOptimizer(learning_rate = learning_rate)
+training_operation = optimizer.minimize(loss_operation)
+```
+I use the Adam Optimizer with the softmax cross entropy loss function. The learning rate is 0.001, 50 EPOCHS and BATCH SIZE is 256. Below is the evaluate function.
+```python
+correct_prediction = tf.equal(tf.argmax(logits, 1), tf.argmax(one_hot_y, 1))
+accuracy_operation = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+saver = tf.train.Saver()
+
+def evaluate(X_data, y_data):
+    num_examples = len(X_data)
+    total_accuracy = 0
+    sess = tf.get_default_session()
+    for offset in range(0, num_examples, BATCH_SIZE):
+        batch_x, batch_y = X_data[offset:offset+BATCH_SIZE], y_data[offset:offset+BATCH_SIZE]
+        accuracy = sess.run(accuracy_operation, feed_dict={x: batch_x, y: batch_y, keep_prob: 1.0 })
+        total_accuracy += (accuracy * len(batch_x))
+    return total_accuracy / num_examples
+```
+And the training code and result. The validation accuracy is 97.8%.
+```python
+from timeit import default_timer as timer
+
+# Shuffle data
+from sklearn.utils import shuffle
+
+X_train_final, y_train_final = shuffle(X_train_final, y_train_final)
+
+validation_accuracies = []
+start_time = timer()
+with tf.Session() as sess:
+    sess.run(tf.global_variables_initializer())
+    num_examples = len(X_train_final)
+    
+    
+    print("Training numer of images:", num_examples)
+    print("Validation number of images:", len(X_valid_final) )
+    print("Augment data strategy: Maximum augment training data (15)")
+    print("learning rate = ", learning_rate)
+    print("EPOCHS = ", EPOCHS)
+    print("BATCH_SIZE = ", BATCH_SIZE)
+    print("Drop out = 0.5")
+    print()
+    for i in range(EPOCHS):
+        start_epoch_time = timer()
+        X_train_final, y_train_final = shuffle(X_train_final, y_train_final)
+        for offset in range(0, num_examples, BATCH_SIZE):
+            end = offset + BATCH_SIZE
+            batch_x, batch_y = X_train_final[offset:end], y_train_final[offset:end]
+            sess.run(training_operation, feed_dict={x: batch_x, y: batch_y, keep_prob: 0.5})
+            if (offset % 200 == 0):
+                print('-', end='' )
+            if (offset % 900 == 0):
+                print('|', end='' )
+                
+            
+        
+        end_epoch_time = timer()
+        duration_epoch = (end_epoch_time - start_epoch_time)/60
+        #training_accuracy = evaluate(X_train_final, y_train_final)
+        print()
+        print("EPOCH {} ...".format(i+1))
+        print("Training time: %4.2f mins"  %duration_epoch)
+        validation_accuracy = evaluate(X_valid_final, y_valid_final)
+        validation_accuracies.append(validation_accuracy)
+        end_valid_epoch_time = timer()
+        duration_valid_epoch = (end_valid_epoch_time - start_epoch_time) / 60
+        print("Included validation time: %4.2f mins"  %duration_valid_epoch)
+        #print("Tranning Accuracy = {:.3f}".format(training_accuracy))
+        print("Validation Accuracy = {:.3f}".format(validation_accuracy))
+        print()
+        
+    end_time = timer()
+    duration = (end_time - start_time)/60
+    print("Duration time: %4.2f mins" %duration)
+    #saver.save(sess, './lenet')
+    saver.save(sess, './LeNetYann-10')
+    print("Model saved")
+```
+
+Training numer of images: 556784
+Validation number of images: 4410
+Augment data strategy: Maximum augment training data (15)
+learning rate =  0.001
+EPOCHS =  50
+BATCH_SIZE =  256
+Drop out = 0.5
+
+-|---------|---------|---------|---------|---------|---------|---------|---------|---------|-----
+EPOCH 1 ...
+Training time: 2.78 mins
+Included validation time: 2.79 mins
+Validation Accuracy = 0.923
+
+-|---------|---------|---------|---------|---------|---------|---------|---------|---------|-----
+EPOCH 2 ...
+Training time: 2.76 mins
+Included validation time: 2.77 mins
+Validation Accuracy = 0.946
+
+-|---------|---------|---------|---------|---------|---------|---------|---------|---------|-----
+EPOCH 3 ...
+Training time: 2.76 mins
+Included validation time: 2.77 mins
+Validation Accuracy = 0.951
+
+-|---------|---------|---------|---------|---------|---------|---------|---------|---------|-----
+EPOCH 4 ...
+Training time: 2.76 mins
+Included validation time: 2.77 mins
+Validation Accuracy = 0.968
+
+-|---------|---------|---------|---------|---------|---------|---------|---------|---------|-----
+EPOCH 5 ...
+Training time: 2.76 mins
+Included validation time: 2.77 mins
+Validation Accuracy = 0.965
+
+-|---------|---------|---------|---------|---------|---------|---------|---------|---------|-----
+EPOCH 6 ...
+Training time: 2.76 mins
+Included validation time: 2.77 mins
+Validation Accuracy = 0.973
+
+-|---------|---------|---------|---------|---------|---------|---------|---------|---------|-----
+EPOCH 7 ...
+Training time: 2.77 mins
+Included validation time: 2.77 mins
+Validation Accuracy = 0.973
+
+-|---------|---------|---------|---------|---------|---------|---------|---------|---------|-----
+EPOCH 8 ...
+Training time: 2.76 mins
+Included validation time: 2.77 mins
+Validation Accuracy = 0.976
+
+-|---------|---------|---------|---------|---------|---------|---------|---------|---------|-----
+EPOCH 9 ...
+Training time: 2.76 mins
+Included validation time: 2.77 mins
+Validation Accuracy = 0.978
+
+-|---------|---------|---------|---------|---------|---------|---------|---------|---------|-----
+EPOCH 10 ...
+Training time: 2.77 mins
+Included validation time: 2.78 mins
+Validation Accuracy = 0.980
+
+-|---------|---------|---------|---------|---------|---------|---------|---------|---------|-----
+EPOCH 11 ...
+Training time: 2.77 mins
+Included validation time: 2.77 mins
+Validation Accuracy = 0.974
+
+-|---------|---------|---------|---------|---------|---------|---------|---------|---------|-----
+EPOCH 12 ...
+Training time: 2.77 mins
+Included validation time: 2.77 mins
+Validation Accuracy = 0.977
+
+-|---------|---------|---------|---------|---------|---------|---------|---------|---------|-----
+EPOCH 13 ...
+Training time: 2.77 mins
+Included validation time: 2.77 mins
+Validation Accuracy = 0.980
+
+-|---------|---------|---------|---------|---------|---------|---------|---------|---------|-----
+EPOCH 14 ...
+Training time: 2.77 mins
+Included validation time: 2.78 mins
+Validation Accuracy = 0.981
+
+-|---------|---------|---------|---------|---------|---------|---------|---------|---------|-----
+EPOCH 15 ...
+Training time: 2.85 mins
+Included validation time: 2.85 mins
+Validation Accuracy = 0.983
+
+-|---------|---------|---------|---------|---------|---------|---------|---------|---------|-----
+EPOCH 16 ...
+Training time: 2.76 mins
+Included validation time: 2.77 mins
+Validation Accuracy = 0.971
+
+-|---------|---------|---------|---------|---------|---------|---------|---------|---------|-----
+EPOCH 17 ...
+Training time: 2.77 mins
+Included validation time: 2.78 mins
+Validation Accuracy = 0.983
+
+-|---------|---------|---------|---------|---------|---------|---------|---------|---------|-----
+EPOCH 18 ...
+Training time: 2.77 mins
+Included validation time: 2.77 mins
+Validation Accuracy = 0.981
+
+-|---------|---------|---------|---------|---------|---------|---------|---------|---------|-----
+EPOCH 19 ...
+Training time: 2.77 mins
+Included validation time: 2.78 mins
+Validation Accuracy = 0.981
+
+-|---------|---------|---------|---------|---------|---------|---------|---------|---------|-----
+EPOCH 20 ...
+Training time: 2.77 mins
+Included validation time: 2.78 mins
+Validation Accuracy = 0.978
+
+-|---------|---------|---------|---------|---------|---------|---------|---------|---------|-----
+EPOCH 21 ...
+Training time: 2.86 mins
+Included validation time: 2.86 mins
+Validation Accuracy = 0.982
+
+-|---------|---------|---------|---------|---------|---------|---------|---------|---------|-----
+EPOCH 22 ...
+Training time: 2.77 mins
+Included validation time: 2.77 mins
+Validation Accuracy = 0.979
+
+-|---------|---------|---------|---------|---------|---------|---------|---------|---------|-----
+EPOCH 23 ...
+Training time: 2.84 mins
+Included validation time: 2.85 mins
+Validation Accuracy = 0.980
+
+-|---------|---------|---------|---------|---------|---------|---------|---------|---------|-----
+EPOCH 24 ...
+Training time: 2.81 mins
+Included validation time: 2.82 mins
+Validation Accuracy = 0.981
+
+-|---------|---------|---------|---------|---------|---------|---------|---------|---------|-----
+EPOCH 25 ...
+Training time: 2.82 mins
+Included validation time: 2.82 mins
+Validation Accuracy = 0.968
+
+-|---------|---------|---------|---------|---------|---------|---------|---------|---------|-----
+EPOCH 26 ...
+Training time: 2.85 mins
+Included validation time: 2.86 mins
+Validation Accuracy = 0.972
+
+-|---------|---------|---------|---------|---------|---------|---------|---------|---------|-----
+EPOCH 27 ...
+Training time: 2.77 mins
+Included validation time: 2.77 mins
+Validation Accuracy = 0.981
+
+-|---------|---------|---------|---------|---------|---------|---------|---------|---------|-----
+EPOCH 28 ...
+Training time: 2.83 mins
+Included validation time: 2.84 mins
+Validation Accuracy = 0.965
+
+-|---------|---------|---------|---------|---------|---------|---------|---------|---------|-----
+EPOCH 29 ...
+Training time: 2.77 mins
+Included validation time: 2.78 mins
+Validation Accuracy = 0.979
+
+-|---------|---------|---------|---------|---------|---------|---------|---------|---------|-----
+EPOCH 30 ...
+Training time: 2.77 mins
+Included validation time: 2.78 mins
+Validation Accuracy = 0.979
+
+-|---------|---------|---------|---------|---------|---------|---------|---------|---------|-----
+EPOCH 31 ...
+Training time: 2.77 mins
+Included validation time: 2.77 mins
+Validation Accuracy = 0.974
+
+-|---------|---------|---------|---------|---------|---------|---------|---------|---------|-----
+EPOCH 32 ...
+Training time: 2.77 mins
+Included validation time: 2.77 mins
+Validation Accuracy = 0.977
+
+-|---------|---------|---------|---------|---------|---------|---------|---------|---------|-----
+EPOCH 33 ...
+Training time: 2.76 mins
+Included validation time: 2.77 mins
+Validation Accuracy = 0.982
+
+-|---------|---------|---------|---------|---------|---------|---------|---------|---------|-----
+EPOCH 34 ...
+Training time: 2.77 mins
+Included validation time: 2.78 mins
+Validation Accuracy = 0.973
+
+-|---------|---------|---------|---------|---------|---------|---------|---------|---------|-----
+EPOCH 35 ...
+Training time: 2.77 mins
+Included validation time: 2.77 mins
+Validation Accuracy = 0.971
+
+-|---------|---------|---------|---------|---------|---------|---------|---------|---------|-----
+EPOCH 36 ...
+Training time: 2.76 mins
+Included validation time: 2.76 mins
+Validation Accuracy = 0.975
+
+-|---------|---------|---------|---------|---------|---------|---------|---------|---------|-----
+EPOCH 37 ...
+Training time: 2.76 mins
+Included validation time: 2.77 mins
+Validation Accuracy = 0.979
+
+-|---------|---------|---------|---------|---------|---------|---------|---------|---------|-----
+EPOCH 38 ...
+Training time: 2.77 mins
+Included validation time: 2.77 mins
+Validation Accuracy = 0.977
+
+-|---------|---------|---------|---------|---------|---------|---------|---------|---------|-----
+EPOCH 39 ...
+Training time: 2.76 mins
+Included validation time: 2.76 mins
+Validation Accuracy = 0.980
+
+-|---------|---------|---------|---------|---------|---------|---------|---------|---------|-----
+EPOCH 40 ...
+Training time: 2.76 mins
+Included validation time: 2.76 mins
+Validation Accuracy = 0.979
+
+-|---------|---------|---------|---------|---------|---------|---------|---------|---------|-----
+EPOCH 41 ...
+Training time: 2.76 mins
+Included validation time: 2.77 mins
+Validation Accuracy = 0.979
+
+-|---------|---------|---------|---------|---------|---------|---------|---------|---------|-----
+EPOCH 42 ...
+Training time: 2.76 mins
+Included validation time: 2.77 mins
+Validation Accuracy = 0.970
+
+-|---------|---------|---------|---------|---------|---------|---------|---------|---------|-----
+EPOCH 43 ...
+Training time: 2.76 mins
+Included validation time: 2.76 mins
+Validation Accuracy = 0.979
+
+-|---------|---------|---------|---------|---------|---------|---------|---------|---------|-----
+EPOCH 44 ...
+Training time: 2.76 mins
+Included validation time: 2.77 mins
+Validation Accuracy = 0.974
+
+-|---------|---------|---------|---------|---------|---------|---------|---------|---------|-----
+EPOCH 45 ...
+Training time: 2.76 mins
+Included validation time: 2.76 mins
+Validation Accuracy = 0.963
+
+-|---------|---------|---------|---------|---------|---------|---------|---------|---------|-----
+EPOCH 46 ...
+Training time: 2.75 mins
+Included validation time: 2.76 mins
+Validation Accuracy = 0.963
+
+-|---------|---------|---------|---------|---------|---------|---------|---------|---------|-----
+EPOCH 47 ...
+Training time: 2.76 mins
+Included validation time: 2.77 mins
+Validation Accuracy = 0.978
+
+-|---------|---------|---------|---------|---------|---------|---------|---------|---------|-----
+EPOCH 48 ...
+Training time: 2.76 mins
+Included validation time: 2.77 mins
+Validation Accuracy = 0.955
+
+-|---------|---------|---------|---------|---------|---------|---------|---------|---------|-----
+EPOCH 49 ...
+Training time: 2.76 mins
+Included validation time: 2.77 mins
+Validation Accuracy = 0.975
+
+-|---------|---------|---------|---------|---------|---------|---------|---------|---------|-----
+EPOCH 50 ...
+Training time: 2.76 mins
+Included validation time: 2.76 mins
+Validation Accuracy = 0.978
+
+Duration time: 139.06 mins
+Model saved
+## Validate on the test dataset
+```python
+X_test_gray = grayscale_images(X_test)
+X_test_normalized = normalized_images(X_test_gray)
+# Evaluate the test dataset
+
+with tf.Session() as sess:
+    sess.run(tf.global_variables_initializer())
+    saver2 = tf.train.import_meta_graph('./LeNetYann-10.meta')
+    saver2.restore(sess, "./LeNetYann-10")
+    test_accuracy = evaluate(X_test_normalized, y_test)
+    print("Test Set Accuracy = {:.3f}".format(test_accuracy))
+```
+
+INFO:tensorflow:Restoring parameters from ./LeNetYann-10
+Test Set Accuracy = 0.967
+WOW. Finally, I got the test set accuracy 96.7%
+## Solution Approach
+### Data preprocessing and augmentation
+It's easy to regconize that the validation data is not enough for training with only 34799 records. I have implemented the augment image function that can multiple one image 15 times without changing the meaning of traffic sign. There are two data augment approaches that I need to choose: make the augment training data to be balance distribution without less data or make the augment data has more records but not balance distribution. I have tried both augment data approaches with the same model architecture and hyperparameters. The balanced distribution approach has 97.1% validation accuracy compare to the maximun data augment approach with 97.6% validation accuracy.
+I have decided not augment on the validation data because it does not help on increasing the validation accuracy. The augment on validation data only give me the validation accuracy about 94.1% - it's slower than keep validation data original approach only above 76.5% validation accuracy.
+### Model Architecture
+I have implemented 2 simple model architectures: the original LeNet model architecture from Udacity lession and the Multi-Scale Convolutional Networks LeNet modified version from [Pierre Sermanet and Yann LeCun](http://yann.lecun.com/exdb/publis/pdf/sermanet-ijcnn-11.pdf) paper. Below are 2 architectures implementation and result:
+#### LeNet Model Architecture
+I followed the LeNet architecture from Udacity lession. I have added dropout function with dropout keep_prop= 0.5 to fully connected layers in order to reduce the overfitting. Below is the code:
+```python
+from tensorflow.contrib.layers import flatten
+
+keep_prob = tf.placeholder(tf.float32)
+
+def LeNet(x, mu=0, sigma=0.1):    
+  
+    
+    # Layer 1: Convolutional. Input = 32x32x1. Output = 28x28x6.
+    # Need a filter height, width = 5 - strides 2 - VALID PADDING
+    # VALID Padding, the output height and width are computed as:
+    #out_height = ceil(float(in_height - filter_height + 1) / float(strides[1]))
+    # (32-5 + 1)/1
+    conv1_weights = tf.Variable(tf.truncated_normal(shape=(5,5,1,6), mean = mu, stddev = sigma))
+    conv1_bias = tf.Variable(tf.zeros(6))
+    conv1_strides = [1, 1, 1, 1]
+    conv1_padding = 'VALID'
+    conv1_layer = tf.nn.bias_add(tf.nn.conv2d(x, conv1_weights, conv1_strides, conv1_padding), conv1_bias)
+    # Activation.
+    # Choose relu
+    conv1_layer = tf.nn.relu(conv1_layer)
+    # Pooling. Input = 28x28x6. Output = 14x14x6.
+    # SAME Padding
+    # out_height = ceil(float(in_height) / float(strides[1]))
+    conv1_pksize = [1,2,2, 1]
+    conv1_pstrides = [1,2,2, 1]
+    conv1_kpadding = 'SAME'
+    conv1_layer = tf.nn.max_pool(conv1_layer, conv1_pksize, conv1_pstrides, conv1_kpadding)
+    
+    
+    # Layer 2: Convolutional. Output = 10x10x16.
+    # Input from layer 1: 14x14x6
+    # (14-5+1)/1 - filter width - height = 5, strides 1
+    conv2_weights = tf.Variable(tf.truncated_normal(shape=(5,5,6,16), mean = mu, stddev = sigma))
+    conv2_bias = tf.Variable(tf.zeros(16))
+    conv2_strides = [1, 1, 1, 1]
+    conv2_padding = 'VALID'
+    conv2_layer = tf.nn.bias_add(tf.nn.conv2d(conv1_layer, conv2_weights, conv2_strides, conv2_padding), conv2_bias)
+    # Activation.
+    # Choose RELU
+    conv2_layer = tf.nn.relu(conv2_layer)
+    # Pooling. Input = 10x10x16. Output = 5x5x16.
+    # SAME PADDING with strides = 2
+    conv2_pksize = [1, 2, 2, 1]
+    conv2_pstrides = [1, 2, 2, 1]
+    conv2_ppadding = 'SAME'
+    conv2_layer = tf.nn.max_pool(conv2_layer, conv2_pksize, conv2_pstrides, conv2_ppadding)
+
+    # Flatten. Input = 5x5x16. Output = 400.
+    fc = flatten(conv2_layer)
+    
+    # Layer 3: Fully Connected. Input = 400. Output = 120.
+    fc1_weights = tf.Variable(tf.truncated_normal(shape=(400,120), mean=mu, stddev = sigma))
+    fc1_bias = tf.Variable(tf.zeros(120))
+    fc1_layer = tf.matmul(fc, fc1_weights) + fc1_bias
+    # Activation.
+    fc1_layer = tf.nn.relu(fc1_layer)
+    
+    # Dropout
+    fc1_layer = tf.nn.dropout(fc1_layer, keep_prob)
+    
+    # Layer 4: Fully Connected. Input = 120. Output = 84.
+    fc2_w = tf.Variable(tf.truncated_normal(shape=(120,84), mean=mu, stddev = sigma))
+    fc2_b = tf.Variable(tf.zeros(84))
+    fc2_layer = tf.matmul(fc1_layer, fc2_w) + fc2_b
+    
+    # Activation.
+    fc2_layer = tf.nn.relu(fc2_layer)
+    
+    fc2_layer = tf.nn.dropout(fc2_layer, keep_prob)
+       
+    # Layer 5: Fully Connected. Input = 84. Output = 43.
+    fc3_w = tf.Variable(tf.truncated_normal(shape=(84,43), mean=mu, stddev = sigma))
+    fc3_b = tf.Variable(tf.zeros(43))
+    logits = tf.matmul(fc2_layer, fc3_w) + fc3_b
+    return logits
+```
+I got the validation accuracy is 96.9% with learning rate = 0.001, EPOCHS = 60 and BATCH SIZE = 128
+#### LeNet Pierre Sermanet and Yann LeCun version
+Because there is no detail on model architecture on each layer from the Pierre Sermanet and Yann LeCun paper, so I need to choose with different models. Below are 2 versions of it.
+##### LeNet modified version 1
+![LeNetV1](LeNet.png)
+In this version, I have tried to sub sampling the output of convolution layer 1 and convolution layer 2 to the fully connection layer. I got the validation accuracy is 97.3%
+##### LeNet modified version 2
+![LeNetV2](LeNet-Yann.png)
+It's my final model architecture because I got the better validation accuracies on it. I almost do hyper-parameters optimization on this model architecture
+### Hyper-parameter optimization
+I have tried with some different learning rate: 0.0001, 0.0005 and 0.001. It's easy to choose the learning rate is 0.001 because of the training accuracy increase much after about 5 - 10 EPOCHS and keep increate a little bit on it. The 0.0001 and 0.0005 are small learning rate with the training accuracy is increased slower.
+I have tried the BATCH SIZE with 128 and 256 values. The 256 BATCH SIZE gives the more validation accuracy than 128 BATCH SIZE about 0.2 to 0.4% - 97.4% compare with 97.8%. Also the 256 BATCH SIZE need more time to train than the 128 BATCH SIZE but not much (about 207 minutes compare to 209 minutes). Finally, I have choosen the 256 BATCH SIZE.
+I ussually choose the EPOCHS is 60. However, during the expirement, I relized that the validation accuracy does not increase so much after 30 EPOCHS. So, I have decided to reduce the EPOCHS to 50. In the future, I would like to apply the early stop approach in order to get the better validation accuracy.
+### History
+I kept the history, plesae refer to the logs folder to more information.
+## Test a Model on new images
+### Load and show the web images
+```python
+### Load the images and plot them here.
+### Feel free to use as many code cells as needed.
+
+import os
+import matplotlib.image as mpimg
+
+web_images = []
+
+fig, axs = plt.subplots(2,5, figsize=(8, 4))
+fig.subplots_adjust(hspace = .2, wspace=.001)
+axs = axs.ravel()
+for i, img in enumerate(os.listdir('./web-images/')):
+    image = cv2.imread('./web-images/' + img)
+    axs[i].axis('off')
+    axs[i].imshow(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
+    web_images.append(image)
+
+web_images = np.asarray(web_images)
+print('Image shape:', web_images.shape)
+```
+![web-images](web-images1.png)
+### Performance on new images
+```python
+web_images_gray = grayscale_images(web_images)
+web_images_normalized = normalized_images(web_images_gray)
+
+web_labels = [30, 39, 34, 17, 40, 0, 4, 3, 31, 25]
+#web_labels = [30, 39, 34, 17, 40, 0, 4, 3]
+
+with tf.Session() as sess:
+    sess.run(tf.global_variables_initializer())
+    saver3 = tf.train.import_meta_graph('./LeNetYann-10.meta')
+    saver3.restore(sess, "./LeNetYann-10")
+    my_accuracy = evaluate(web_images_normalized, web_labels)
+    print("Web Images Set Accuracy = {:.3f}".format(my_accuracy))
+```
+INFO:tensorflow:Restoring parameters from ./LeNetYann-10
+Web Images Set Accuracy = 1.000
+It's amazing. The accuracy of web images validation is 100%. It works well with the real images from German that I found from website. And I known that it cannot work well with the Canada traffic signs system because there are some Canada traffic signs don't have in the training dataset.
+### Output Top 5 Softmax Probabilities For Each Image Found on the Web
+```python
+### Print out the top five softmax probabilities for the predictions on the German traffic sign images found on the web. 
+### Feel free to use as many code cells as needed.
+top = 5
+softmax_logits = tf.nn.softmax(logits)
+top_k = tf.nn.top_k(softmax_logits, k=top)
+
+with tf.Session() as sess:
+    sess.run(tf.global_variables_initializer())
+    saver = tf.train.import_meta_graph('./LeNetYann-10.meta')
+    saver.restore(sess, "./LeNetYann-10")
+    my_softmax_logits = sess.run(softmax_logits, feed_dict={x: web_images_normalized, keep_prob: 1.0})
+    my_top_k = sess.run(top_k, feed_dict={x: web_images_normalized, keep_prob: 1.0})
+
+    
+    fig, axs = plt.subplots(len(web_images),top + 1, figsize=(14, 16))
+    fig.subplots_adjust(hspace = .8, wspace=.4)
+    axs = axs.ravel()
+
+    for i, image in enumerate(web_images):
+        axs[6*i].axis('off')
+        axs[6*i].imshow(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
+        axs[6*i].set_title('input')
+        for j in range (top):
+            guess = my_top_k[1][i][j]
+            index = np.argwhere(y_train == guess)[0]
+            axs[6*i+j + 1].axis('off')
+            axs[6*i+j + 1].imshow(X_train[index].squeeze(), cmap='gray')
+            axs[6*i+j + 1].set_title('top {} guess: {} ({:.0f}%)'.format(j + 1, guess, 100*my_top_k[0][i][j]))
+```
+![top5](top5.png)
 
